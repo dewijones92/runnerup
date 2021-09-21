@@ -26,6 +26,7 @@
         <ListPreference
                 android:key="@string/pref_unit"
                 android:persistent="true"
+                android:defaultValue="km"
                 android:title="@string/Unit_preference"
                 android:entries="@array/unitEntries"
                 android:entryValues="@array/unitValues" />

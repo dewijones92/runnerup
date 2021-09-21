@@ -190,18 +190,7 @@ public class Formatter implements OnSharedPreferenceChangeListener {
     }
 
     public static boolean getUseMetric(Resources res, SharedPreferences prefs, Editor editor) {
-        boolean _km;
-        String unit = prefs.getString(res.getString(R.string.pref_unit), null);
-        if (unit == null)
-            _km = guessDefaultUnit(res, prefs, editor);
-        else if (unit.contentEquals("km"))
-            _km = true;
-        else if (unit.contentEquals("mi"))
-            _km = false;
-        else
-            _km = guessDefaultUnit(res, prefs, editor);
-
-        return _km;
+        return true;
     }
 
     private static boolean guessDefaultUnit(Resources res, SharedPreferences prefs, Editor editor) {

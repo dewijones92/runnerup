@@ -12,11 +12,6 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
-    dexOptions {
-        // Skip pre-dexing when running on Travis CI or when disabled via -Dpre-dex=false.
-        preDexLibraries = preDexEnabled && !travisBuild
-    }
-
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
@@ -31,8 +26,6 @@ android {
     defaultConfig {
         minSdkVersion 15
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName = version
 
         if (rootProject.ext.antPlusLib) {
             buildConfigField 'Boolean', 'ANTPLUS_ENABLED', "true"
@@ -45,13 +38,13 @@ android {
 
 repositories {
     google()
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
     implementation "androidx.appcompat:appcompat:${rootProject.ext.appcompat_version}"
 
     if (rootProject.ext.antPlusLib) {
-        implementation files("../" + antPlusLib)
+        compileOnly files("../" + antPlusLib)
     }
 }

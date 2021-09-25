@@ -273,11 +273,6 @@ public class StartActivity extends AppCompatActivity
         advancedStepList = findViewById(R.id.advanced_step_list);
         advancedStepList.setDividerHeight(0);
         advancedStepList.setAdapter(advancedWorkoutStepsAdapter);
-        advancedDownloadWorkoutButton = findViewById(R.id.advanced_download_button);
-        advancedDownloadWorkoutButton.setOnClickListener(v -> {
-            Intent intent = new Intent(StartActivity.this, ManageWorkoutsActivity.class);
-            StartActivity.this.startActivityForResult(intent, 113);
-        });
 
         if (getParent() != null && getParent().getIntent() != null) {
             Intent i = getParent().getIntent();
@@ -646,6 +641,7 @@ public class StartActivity extends AppCompatActivity
     private List<String> getPermissions() {
         List<String> requiredPerms = new ArrayList<>();
         requiredPerms.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        requiredPerms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             requiredPerms.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION);
@@ -968,10 +964,10 @@ public class StartActivity extends AppCompatActivity
     public String getGpsAccuracyString(float accuracy) {
         String res = "";
         if (accuracy > 0) {
-            String accString = formatter.formatElevation(Formatter.Format.TXT_SHORT, accuracy);
+            String accString = formatter.formatElevation(Formatter.Format.TXT_LONG, accuracy);
             if (mTracker.getCurrentElevation() != null) {
                 res = String.format(Locale.getDefault(), getString(R.string.GPS_accuracy_elevation),
-                        accString, formatter.formatElevation(Formatter.Format.TXT_SHORT, mTracker.getCurrentElevation()));
+                        accString, formatter.formatElevation(Formatter.Format.TXT_LONG, mTracker.getCurrentElevation()));
             } else {
                 res = String.format(Locale.getDefault(), getString(R.string.GPS_accuracy_no_elevation),
                         accString);
@@ -983,10 +979,11 @@ public class StartActivity extends AppCompatActivity
                 Location l = mTracker.getLastKnownLocation();
 
                 if (l != null) {
-                    res += " ["
-                            + l.getVerticalAccuracyMeters() + " m, "
-                            + l.getSpeedAccuracyMetersPerSecond() + " m/s, "
-                            + l.getBearingAccuracyDegrees() + " deg]";
+                    res += String.format(Locale.getDefault(), " [%1$s, %2$s/%3$s/s, %4$.1f/%5$.1f deg]",
+                            formatter.formatElevation(Formatter.Format.TXT_LONG, l.getVerticalAccuracyMeters()),
+                            formatter.formatElevation(Formatter.Format.TXT_SHORT, l.getSpeed()),
+                            formatter.formatElevation(Formatter.Format.TXT_LONG, l.getSpeedAccuracyMetersPerSecond()),
+                            l.getBearing(), l.getBearingAccuracyDegrees());
                 }
             }
         }
@@ -1160,7 +1157,6 @@ public class StartActivity extends AppCompatActivity
             advancedWorkout = WorkoutSerializer.readFile(ctx, name);
             advancedWorkoutStepsAdapter.steps = advancedWorkout.getStepList();
             advancedWorkoutStepsAdapter.notifyDataSetChanged();
-            advancedDownloadWorkoutButton.setVisibility(View.GONE);
         } catch (Exception ex) {
             ex.printStackTrace();
             new AlertDialog.Builder(StartActivity.this)

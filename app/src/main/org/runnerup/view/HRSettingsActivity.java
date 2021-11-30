@@ -86,9 +86,8 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
     private Formatter formatter = null;
     private GraphView graphView = null;
     private LineGraphSeries<DataPoint> graphViewSeries = null;
-    private final ArrayList<DataPoint> graphViewListData = new ArrayList<>();
-    private DataPoint[] graphViewArrayData = new DataPoint[0];
-    private static final int GRAPH_HISTORY_SECONDS = 180;
+    private static final int GRAPH_HISTORY_SIZE = 180;
+    private static final double xInterval = 60;
 
     private DeviceAdapter deviceAdapter = null;
     private boolean mIsScanning = false;
@@ -131,9 +130,17 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
 
         formatter = new Formatter(this);
         {
-            LinearLayout graphLayout = findViewById(R.id.hr_graph_layout);
             graphView = new GraphView(this);
             graphView.setTitle(getString(R.string.Heart_rate));
+            DataPoint[] empty = {};
+            graphViewSeries = new LineGraphSeries<>(empty);
+            graphView.addSeries(graphViewSeries);
+            graphView.getViewport().setXAxisBoundsManual(true);
+            graphView.getViewport().setMinX(0);
+            graphView.getViewport().setMaxX(xInterval);
+            graphView.getViewport().setYAxisBoundsManual(true);
+            graphView.getViewport().setMinY(40);
+            graphView.getViewport().setMaxY(200);
             graphView.getGridLabelRenderer().setLabelFormatter(new DefaultLabelFormatter() {
                 @Override
                 public String formatLabel(double value, boolean isValueX) {
@@ -144,6 +151,8 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
                     }
                 }
             });
+
+            LinearLayout graphLayout = findViewById(R.id.hr_graph_layout);
             graphLayout.addView(graphView);
         }
 
@@ -164,12 +173,19 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
         getMenuInflater().inflate(R.menu.hrsettings_menu, menu);
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
         Resources res = getResources();
-        boolean isChecked = prefs.getBoolean(res.getString(R.string.pref_bt_experimental), false);
-        MenuItem item = menu.findItem(R.id.menu_hrdevice_expermental);
+
+        boolean isChecked = prefs.getBoolean(res.getString(R.string.pref_bt_paired_ble), false);
+        MenuItem item = menu.findItem(R.id.menu_hrdevice_paired_ble);
         item.setChecked(isChecked);
+
+        isChecked = prefs.getBoolean(res.getString(R.string.pref_bt_experimental), false);
+        item = menu.findItem(R.id.menu_hrdevice_experimental);
+        item.setChecked(isChecked);
+
         isChecked = prefs.getBoolean(res.getString(R.string.pref_bt_mock), false);
         item = menu.findItem(R.id.menu_hrdevice_mock);
         item.setChecked(isChecked);
+
         return true;
     }
 
@@ -182,7 +198,8 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
         } else if (id == R.id.menu_hrzones) {
             hrZonesClick.onClick(null);
             return true;
-        } else if (id == R.id.menu_hrdevice_expermental
+        } else if (id == R.id.menu_hrdevice_paired_ble
+                || id == R.id.menu_hrdevice_experimental
                 || id == R.id.menu_hrdevice_mock) {
             boolean isChecked = !item.isChecked();
             item.setChecked(isChecked);
@@ -190,11 +207,14 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
             Resources res = getResources();
             Editor editor = prefs.edit();
             int key;
-            if (id == R.id.menu_hrdevice_expermental) {
+            if (id == R.id.menu_hrdevice_paired_ble) {
+                key = R.string.pref_bt_paired_ble;
+            } else if (id == R.id.menu_hrdevice_experimental) {
                 key = R.string.pref_bt_experimental;
             } else {
                 key = R.string.pref_bt_mock;
             }
+
             editor.putBoolean(res.getString(key), isChecked);
             editor.apply();
             providers = HRManager.getHRProviderList(this);
@@ -303,10 +323,9 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
     }
 
     private void clearGraph() {
-        graphView.removeAllSeries();
-        graphViewSeries = null;
-        graphViewListData.clear();
-        graphViewArrayData = new DataPoint[0];
+        DataPoint[] empty = {};
+        graphViewSeries.resetData(empty);
+        timerStartTime = 0;
     }
 
     private void updateView() {
@@ -413,7 +432,7 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
                             btAddress = hrDevice.getAddress();
                             btName = hrDevice.getName();
                         });
-        if (hrProvider.isBondingDevice()) {
+        if (hrProvider.includePairingBLE()) {
             builder.setNeutralButton("Pairing", (dialog, which) -> {
                 dialog.cancel();
                 Intent i = new Intent(Settings.ACTION_BLUETOOTH_SETTINGS);
@@ -499,42 +518,35 @@ public class HRSettingsActivity extends AppCompatActivity implements HRClient {
     private long timerStartTime = 0;
 
     private void readHR() {
-        if (hrProvider != null) {
-            HRData data = hrProvider.getHRData();
-            if(data != null) {
-                long age = data.timestamp;
-                long hrValue = 0;
-                if(data.hasHeartRate)
-                    hrValue = data.hrValue;
+        if (hrProvider == null) {
+            return;
+        }
 
-                tvHR.setText(String.format(Locale.getDefault(), "%d", hrValue));
+        HRData data = hrProvider.getHRData();
+        if (data == null || !data.hasHeartRate) {
+            return;
+        }
 
-                if (age != lastTimestamp) {
-                    if (graphViewSeries == null) {
-                        timerStartTime = System.currentTimeMillis();
-                        DataPoint[] empty = {};
-                        graphViewSeries = new LineGraphSeries<>(empty);
-                        graphView.addSeries(graphViewSeries);
-                        graphView.getGridLabelRenderer().setLabelFormatter(new DefaultLabelFormatter() {
-                            @Override
-                            public String formatLabel(double value, boolean isValueX) {
-                                if (isValueX) {
-                                    return formatter.formatDistance(Formatter.Format.TXT_SHORT, (long) value);
-                                } else {
-                                    return formatter.formatHeartRate(Formatter.Format.TXT_SHORT, value);
-                                }
-                            }
-                        });
-                    }
+        long age = data.timestamp;
+        long hrValue = data.hrValue;
+        if (timerStartTime == 0) {
+            timerStartTime = age;
+            DataPoint[] empty = {};
+            graphViewSeries.resetData(empty);
+        }
 
-                    graphViewListData.add(new DataPoint((age - timerStartTime) / 1000.0, hrValue));
-                    while (graphViewListData.size() > GRAPH_HISTORY_SECONDS) {
-                        graphViewListData.remove(0);
-                    }
-                    graphViewArrayData = graphViewListData.toArray(graphViewArrayData);
-                    graphViewSeries.resetData(graphViewArrayData);
-                    lastTimestamp = age;
-                }
+        tvHR.setText(String.format(Locale.getDefault(), "%d", hrValue));
+        if (age != lastTimestamp) {
+            double x = (age - timerStartTime) / 1000.0;
+            graphViewSeries.appendData(new DataPoint(x, hrValue), true, GRAPH_HISTORY_SIZE);
+            lastTimestamp = age;
+
+            // graphView works weird with live data
+            graphView.getViewport().setMinY(graphViewSeries.getLowestValueY());
+            graphView.getViewport().setMaxY(graphViewSeries.getHighestValueY());
+            if (x > xInterval) {
+                graphView.getViewport().setMinX(x - xInterval);
+                graphView.getViewport().setMaxX(x);
             }
         }
     }
